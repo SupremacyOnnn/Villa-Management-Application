@@ -62,7 +62,7 @@ export const countryApiSlice = apiSlice.injectEndpoints({
       providesTags: ["Booking"],
     }),
     updateBooking: builder.mutation({
-      query: ({ updates }, { id }) => ({
+      query: ({ updates, id }) => ({
         url: `${BOOKING_URL}/${id}`,
         method: "PATCH",
         body: updates,
