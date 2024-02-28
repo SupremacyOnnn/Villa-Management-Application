@@ -65,7 +65,8 @@
   text-decoration: none;
 }
 .carousel-image{
-  height: 90vh;
+  height: 60vh;
+  object-fit: cover;
   background-repeat: no-repeat;
   background-size: cover;
   background-position: center;
