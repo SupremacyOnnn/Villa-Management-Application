@@ -8,10 +8,14 @@ import {
   Card,
   Button,
 } from "react-bootstrap";
+import { PayPalButtons, usePayPalScriptReducer } from "@paypal/react-paypal-js";
 import { useSelector } from "react-redux";
 import { Link, useNavigate } from "react-router-dom";
 import dayjs from "dayjs";
-import { useCreateBookingMutation } from "../slices/bookingApiSlice";
+import {
+  useCreateBookingMutation,
+  useGetPayPalClinetIdQuery,
+} from "../slices/bookingApiSlice";
 import { toast } from "react-toastify";
 import Loader from "../components/Loader";
 import moment from "moment";
@@ -25,12 +29,49 @@ const CheckoutScreen = () => {
       navigate("/shipping");
     }
   }, [room, navigate]);
-  const [createOrder] = useCreateBookingMutation();
+
+  const [createOrder, { isLoading: isCreateBookingLoading }] =
+    useCreateBookingMutation();
+  const [{ isPending }, paypalDispatch] = usePayPalScriptReducer();
+  const {
+    data: payPalClient,
+    isLoading: payPalLoading,
+    error: errorPayPal,
+  } = useGetPayPalClinetIdQuery();
   const parsedStartDate = dayjs(room.startDate, "DD-MM-YYYY");
   const parsedEndDate = dayjs(room.endDate, "DD-MM-YYYY");
   const numberOfDays = parsedEndDate.diff(parsedStartDate, "day");
+  useEffect(() => {
+    if (!errorPayPal && !payPalLoading && payPalClient.clientId) {
+      const loadPaypalScript = async () => {
+        paypalDispatch({
+          type: "resetOptions",
+          value: {
+            "client-id": payPalClient.clientId,
+            currency: "USD",
+          },
+        });
+        paypalDispatch({ type: "setLoadingStatus", value: "pending" });
+      };
+      if (room && numberOfDays > 0) {
+        if (!window.paypal) {
+          loadPaypalScript();
+        }
+      }
+    }
+  }, [
+    errorPayPal,
+    payPalLoading,
+    room,
+    payPalClient,
+    numberOfDays,
+    paypalDispatch,
+  ]);
+
   const totalPrice =
     room.price * numberOfDays + (room.price * numberOfDays * 10) / 100;
+
+  const usdPrice = (totalPrice / 85).toFixed(2);
   if (!room || !room.startDate || !room.endDate || !room.price) {
     return (
       <div>
@@ -38,6 +79,26 @@ const CheckoutScreen = () => {
       </div>
     );
   }
+
+  // useEffect(() => {
+  //   if (!errorPayPal && !payPalLoading && payPalClient.clientId) {
+  //     const loadPaypalScript = async () => {
+  //       paypalDispatch({
+  //         type: "resetOptions",
+  //         value: {
+  //           "client-id": payPalClient.clientId,
+  //           currency: "INR",
+  //         },
+  //       });
+  //       paypalDispatch({ type: "setLoadingStatus", value: "pending" });
+  //     };
+  //     if (room && numberOfDays > 0) {
+  //       if (!window.paypal) {
+  //         loadPaypalScript();
+  //       }
+  //     }
+  //   }
+  // }, [errorPayPal, payPalLoading, room, payPalClient, paypalDispatch]);
   const placeOrderHandler = async () => {
     try {
       await createOrder({
@@ -63,27 +124,43 @@ const CheckoutScreen = () => {
     }
   };
 
-  // const placeOrderLaterHandler = async () => {
-  //   try {
-  //     await createOrder({
-  //       hotelId: room.hotelRef,
-  //       roomId: room._id,
-  //       userId: userInfo._id,
-  //       country: room.country,
-  //       roomName: room.roomName,
-  //       city: room.city,
-  //       startDate: room.startDate,
-  //       endDate: room.endDate,
-  //       totalPrice,
-  //       isPaid: false,
-  //     }).unwrap();
-  //     toast.success("Order Created");
-  //     navigate(`/`);
-  //   } catch (err) {
-  //     console.log(err);
-  //     toast.error(err?.data?.message || err.error || "Cannot Place the order");
-  //   }
-  // };
+  function onCreateOrder(data, actions) {
+    return actions.order.create({
+      purchase_units: [
+        {
+          amount: { value: usdPrice },
+        },
+      ],
+    });
+  }
+  function onApprove(data, actions) {
+    return actions.order.capture().then(async function () {
+      try {
+        await createOrder({
+          name: userInfo.name,
+          picture: room.picture,
+          hotelId: room.hotelRef,
+          roomId: room._id,
+          userId: userInfo._id,
+          country: room.country,
+          roomName: room.roomName,
+          city: room.city,
+          startDate: room.startDate,
+          endDate: room.endDate,
+          totalPrice,
+          price: room.price,
+          isPaid: true,
+        }).unwrap();
+        toast.success("Order Created");
+        navigate(`/`);
+      } catch (err) {
+        alert(err?.data?.message || err.error);
+      }
+    });
+  }
+  function onError(err) {
+    toast.error(err.message);
+  }
   return (
     <>
       {userInfo && room && (
@@ -135,7 +212,7 @@ const CheckoutScreen = () => {
                     <ListGroup.Item>
                       <Row>
                         <Col>Base Price</Col>
-                        <Col>${room.price}</Col>
+                        <Col>Rs.{room.price}</Col>
                       </Row>
                     </ListGroup.Item>
                     <ListGroup.Item>
@@ -147,35 +224,40 @@ const CheckoutScreen = () => {
                     <ListGroup.Item>
                       <Row>
                         <Col>Tax</Col>
-                        <Col>${(room.price * numberOfDays * 10) / 100}</Col>
+                        <Col>Rs.{(room.price * numberOfDays * 10) / 100}</Col>
                       </Row>
                     </ListGroup.Item>
                     <ListGroup.Item>
                       <Row>
                         <Col>Total</Col>
-                        <Col>${totalPrice}</Col>
+                        <Col>Rs.{totalPrice}</Col>
                       </Row>
                     </ListGroup.Item>
-                    <ListGroup.Item>
-                      <Button
-                        type="button"
-                        variant="success"
-                        className="btn-block w-100"
-                        disabled={numberOfDays === 0}
-                        onClick={placeOrderHandler}
-                      >
-                        Confirm Booking and PAY
-                      </Button>
-                      {/* <Button
-                        type="button"
-                        variant="success"
-                        className="btn-block w-100"
-                        disabled={numberOfDays === 0}
-                        onClick={placeOrderLaterHandler}
-                      >
-                        Confirm Booking and PAY At Hotel
-                      </Button> */}
-                    </ListGroup.Item>
+                    {isCreateBookingLoading && <Loader />}
+                    {room &&
+                      numberOfDays > 0 &&
+                      (isPending ? (
+                        <Loader />
+                      ) : (
+                        <ListGroup.Item>
+                          <Button
+                            type="button"
+                            variant="success"
+                            className="btn-block w-100 mb-2"
+                            disabled={numberOfDays === 0}
+                            onClick={placeOrderHandler}
+                          >
+                            Confirm Booking and PAY
+                          </Button>
+                          <div>
+                            <PayPalButtons
+                              createOrder={onCreateOrder}
+                              onApprove={onApprove}
+                              onError={onError}
+                            />
+                          </div>
+                        </ListGroup.Item>
+                      ))}
                   </ListGroup>
                 </Card>
               </Col>

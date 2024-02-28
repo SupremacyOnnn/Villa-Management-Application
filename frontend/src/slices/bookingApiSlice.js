@@ -1,5 +1,5 @@
 import { apiSlice } from "./apiSlice";
-import { BOOKING_URL } from "../constant";
+import { BOOKING_URL, PAYPAL_URL } from "../constant";
 
 export const countryApiSlice = apiSlice.injectEndpoints({
   endpoints: (builder) => ({
@@ -70,6 +70,12 @@ export const countryApiSlice = apiSlice.injectEndpoints({
       keepUnusedDataFor: 5,
       invalidatesTags: ["Booking"],
     }),
+    getPayPalClinetId: builder.query({
+      query: () => ({
+        url: PAYPAL_URL,
+      }),
+      keepUnusedDataFor: 5,
+    }),
     // getRoomsBookingByUserIDAfter: builder.query({
     //   query: (userId) => ({
     //     url: `${BOOKING_URL}/user/:userId/after`,
@@ -98,4 +104,5 @@ export const {
   useGetBookingByHotelIdInRangeQuery,
   useGetBookingByHotelIdPrevQuery,
   useUpdateBookingMutation,
+  useGetPayPalClinetIdQuery,
 } = countryApiSlice;
